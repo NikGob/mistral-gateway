@@ -1,197 +1,289 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mistral Gateway — панель</title>
+<title>Mistral Gateway</title>
 <style>
-/* M3 Expressive tokens (tokens.md §8, baseline seed #6750A4) */
 :root{color-scheme:light dark;
---md-sys-color-primary:#6750A4;--md-sys-color-on-primary:#FFFFFF;--md-sys-color-primary-container:#EADDFF;--md-sys-color-on-primary-container:#21005D;
---md-sys-color-secondary:#625B71;--md-sys-color-on-secondary:#FFFFFF;--md-sys-color-secondary-container:#E8DEF8;--md-sys-color-on-secondary-container:#1D192B;
---md-sys-color-tertiary:#7D5260;--md-sys-color-on-tertiary:#FFFFFF;--md-sys-color-tertiary-container:#FFD8E4;--md-sys-color-on-tertiary-container:#31111D;
---md-sys-color-error:#B3261E;--md-sys-color-on-error:#FFFFFF;--md-sys-color-error-container:#F9DEDC;--md-sys-color-on-error-container:#410E0B;
---md-sys-color-surface:#FEF7FF;--md-sys-color-surface-dim:#DED8E1;--md-sys-color-surface-bright:#FEF7FF;
---md-sys-color-surface-container-lowest:#FFFFFF;--md-sys-color-surface-container-low:#F7F2FA;--md-sys-color-surface-container:#F3EDF7;
---md-sys-color-surface-container-high:#ECE6F0;--md-sys-color-surface-container-highest:#E6E0E9;
+--md-sys-color-primary:#6750A4;--md-sys-color-on-primary:#fff;--md-sys-color-primary-container:#EADDFF;--md-sys-color-on-primary-container:#21005D;
+--md-sys-color-secondary:#625B71;--md-sys-color-on-secondary:#fff;--md-sys-color-secondary-container:#E8DEF8;--md-sys-color-on-secondary-container:#1D192B;
+--md-sys-color-tertiary:#7D5260;--md-sys-color-on-tertiary:#fff;--md-sys-color-tertiary-container:#FFD8E4;--md-sys-color-on-tertiary-container:#31111D;
+--md-sys-color-error:#B3261E;--md-sys-color-on-error:#fff;--md-sys-color-error-container:#F9DEDC;--md-sys-color-on-error-container:#410E0B;
+--md-sys-color-surface:#FEF7FF;--md-sys-color-surface-container-lowest:#fff;--md-sys-color-surface-container-low:#F7F2FA;
+--md-sys-color-surface-container:#F3EDF7;--md-sys-color-surface-container-high:#ECE6F0;--md-sys-color-surface-container-highest:#E6E0E9;
 --md-sys-color-on-surface:#1D1B20;--md-sys-color-on-surface-variant:#49454F;--md-sys-color-outline:#79747E;--md-sys-color-outline-variant:#CAC4D0;
---md-sys-color-inverse-surface:#322F35;--md-sys-color-inverse-on-surface:#F5EFF7;--md-sys-color-inverse-primary:#D0BCFF;--md-sys-color-shadow:#000;
---md-ref-typeface-brand:Roboto,system-ui,'Segoe UI',sans-serif;--md-ref-typeface-plain:Roboto,system-ui,'Segoe UI',sans-serif;
---corner-none:0px;--corner-xs:4px;--corner-s:8px;--corner-m:12px;--corner-l:16px;--corner-xl:28px;--corner-xxl:48px;--corner-full:9999px;
---hover:.08;--focus:.10;--pressed:.10;
---spring-fast-spatial:350ms cubic-bezier(.42,1.67,.21,.90);--spring-default-spatial:500ms cubic-bezier(.38,1.21,.22,1);
---spring-fast-effects:150ms cubic-bezier(.31,.94,.34,1);--spring-default-effects:200ms cubic-bezier(.34,.80,.34,1);--spring-slow-effects:300ms cubic-bezier(.34,.88,.34,1);
+--md-sys-color-inverse-surface:#322F35;--md-sys-color-inverse-on-surface:#F5EFF7;--md-sys-color-inverse-primary:#D0BCFF;
+--plain:Roboto,system-ui,'Segoe UI',sans-serif;--brand:Roboto,system-ui,'Segoe UI',sans-serif;
+--full:9999px;--xs:4px;--s:8px;--m:12px;--l:16px;--xl:28px;--xxl:48px;
+--fast-spatial:350ms cubic-bezier(.42,1.67,.21,.90);--fast-effects:150ms cubic-bezier(.31,.94,.34,1);--default-spatial:500ms cubic-bezier(.38,1.21,.22,1);
 --elev1:0 1px 2px rgb(0 0 0/.3),0 1px 3px 1px rgb(0 0 0/.15);--elev3:0 1px 3px rgb(0 0 0/.3),0 4px 8px 3px rgb(0 0 0/.15)}
 @media(prefers-color-scheme:dark){:root{
 --md-sys-color-primary:#D0BCFF;--md-sys-color-on-primary:#381E72;--md-sys-color-primary-container:#4F378B;--md-sys-color-on-primary-container:#EADDFF;
 --md-sys-color-secondary:#CCC2DC;--md-sys-color-on-secondary:#332D41;--md-sys-color-secondary-container:#4A4458;--md-sys-color-on-secondary-container:#E8DEF8;
 --md-sys-color-tertiary:#EFB8C8;--md-sys-color-on-tertiary:#492532;--md-sys-color-tertiary-container:#633B48;--md-sys-color-on-tertiary-container:#FFD8E4;
 --md-sys-color-error:#F2B8B5;--md-sys-color-on-error:#601410;--md-sys-color-error-container:#8C1D18;--md-sys-color-on-error-container:#F9DEDC;
---md-sys-color-surface:#141218;--md-sys-color-surface-dim:#141218;--md-sys-color-surface-bright:#3B383E;
---md-sys-color-surface-container-lowest:#0F0D13;--md-sys-color-surface-container-low:#1D1B20;--md-sys-color-surface-container:#211F26;
---md-sys-color-surface-container-high:#2B2930;--md-sys-color-surface-container-highest:#36343B;
+--md-sys-color-surface:#141218;--md-sys-color-surface-container-lowest:#0F0D13;--md-sys-color-surface-container-low:#1D1B20;
+--md-sys-color-surface-container:#211F26;--md-sys-color-surface-container-high:#2B2930;--md-sys-color-surface-container-highest:#36343B;
 --md-sys-color-on-surface:#E6E0E9;--md-sys-color-on-surface-variant:#CAC4D0;--md-sys-color-outline:#938F99;--md-sys-color-outline-variant:#49454F;
 --md-sys-color-inverse-surface:#E6E0E9;--md-sys-color-inverse-on-surface:#322F35;--md-sys-color-inverse-primary:#6750A4}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--md-sys-color-surface);color:var(--md-sys-color-on-surface);font:400 1rem/1.5rem var(--md-ref-typeface-plain);letter-spacing:.03125rem;padding-bottom:112px}
-.display-m{font:500 2.8125rem/3.25rem var(--md-ref-typeface-brand);letter-spacing:0}
-.headline-s{font:500 1.5rem/2rem var(--md-ref-typeface-brand)}
-.title-l{font:400 1.375rem/1.75rem var(--md-ref-typeface-brand)}
-.title-m{font:600 1rem/1.5rem var(--md-ref-typeface-plain);letter-spacing:.009375rem}
-.body-m{font:400 .875rem/1.25rem var(--md-ref-typeface-plain);letter-spacing:.015625rem;color:var(--md-sys-color-on-surface-variant)}
-.label-l{font:600 .875rem/1.25rem var(--md-ref-typeface-plain);letter-spacing:.00625rem}
-.label-m{font:500 .75rem/1rem var(--md-ref-typeface-plain);letter-spacing:.03125rem}
-/* App bar (small, 64dp) */
-header.appbar{position:sticky;top:0;z-index:5;height:64px;display:flex;align-items:center;gap:12px;padding:0 16px;background:var(--md-sys-color-surface);transition:background-color var(--spring-default-effects)}
-header.appbar.scrolled{background:var(--md-sys-color-surface-container)}
-.logo{width:40px;height:40px;border-radius:var(--corner-full);background:var(--md-sys-color-primary-container);color:var(--md-sys-color-on-primary-container);display:grid;place-items:center;font-size:20px;flex:none}
-.pool-chip{margin-inline-start:auto;background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container);border-radius:var(--corner-s);padding:6px 12px}
-main{max-width:1200px;margin:0 auto;padding:16px;display:grid;gap:24px}
-@media(min-width:600px){main{padding:24px}}
-/* Interactive state layer + focus ring */
-.interactive{position:relative;isolation:isolate;cursor:pointer;-webkit-tap-highlight-color:transparent;border:0;font:inherit}
-.interactive::before{content:"";position:absolute;inset:0;border-radius:inherit;background:currentColor;opacity:0;pointer-events:none;transition:opacity var(--spring-fast-effects);z-index:0}
-.interactive>*{position:relative;z-index:1}
-.interactive:hover::before{opacity:var(--hover)}
-.interactive:active::before{opacity:var(--pressed)}
+html,body{height:100%}
+body{margin:0;background:var(--md-sys-color-surface);color:var(--md-sys-color-on-surface);font:400 1rem/1.5rem var(--plain);letter-spacing:.03125rem}
+.shell{display:grid;grid-template-columns:96px 1fr;min-height:100%}
+.rail{background:var(--md-sys-color-surface);padding:16px 0;display:flex;flex-direction:column;align-items:center;gap:4px}
+.rail a{width:80px;min-height:56px;display:grid;justify-items:center;align-content:center;gap:4px;text-decoration:none;color:var(--md-sys-color-on-surface-variant);font:500 .75rem/1rem var(--plain);letter-spacing:.03125rem;border-radius:var(--l)}
+.rail .ind{width:56px;height:32px;border-radius:var(--full);display:grid;place-items:center;transition:background-color var(--fast-effects),scale var(--fast-spatial)}
+.rail a[aria-current="page"]{color:var(--md-sys-color-secondary)}
+.rail a[aria-current="page"] .ind{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}
+.rail a:not([aria-current]) .ind{scale:.6 1}
+.rail svg{width:24px;height:24px}
+.main{min-width:0;display:flex;flex-direction:column;min-height:100vh}
+.appbar{height:64px;display:flex;align-items:center;gap:16px;padding:0 24px;background:var(--md-sys-color-surface);position:sticky;top:0;z-index:4}
+.appbar.scrolled{background:var(--md-sys-color-surface-container)}
+.appbar h1{margin:0;font:400 1.375rem/1.75rem var(--brand)}
+.status{margin-left:auto;flex:none;display:flex;align-items:center;gap:8px;height:40px;padding:0 14px 0 12px;border-radius:var(--full);background:var(--md-sys-color-surface-container-high)}
+.dot{width:8px;height:8px;border-radius:var(--full);background:var(--md-sys-color-primary)}
+.dot.off{background:var(--md-sys-color-error)}
+.status b{font:600 .75rem/1rem var(--plain);letter-spacing:.03125rem}
+.status span{font:500 .75rem/1rem var(--plain);color:var(--md-sys-color-on-surface-variant)}
+.content{padding:8px 24px 32px;display:grid;gap:16px}
+.page{display:none}
+.page.on{display:grid;gap:16px}
+#page-chat.on{display:flex;flex-direction:column;height:calc(100vh - 64px);padding:0 24px 16px;gap:12px}
+.hero{background:var(--md-sys-color-primary-container);color:var(--md-sys-color-on-primary-container);border-radius:var(--xxl);padding:28px 32px;display:grid;gap:4px}
+.display{font:500 2.8125rem/3.25rem var(--brand)}
+.headline{font:500 1.5rem/2rem var(--brand)}
+.label{font:600 .875rem/1.25rem var(--plain);letter-spacing:.00625rem}
+.muted{color:var(--md-sys-color-on-surface-variant);font:400 .875rem/1.25rem var(--plain)}
+.hero .muted{color:inherit;opacity:.8}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.card{background:var(--md-sys-color-surface-container-low);border-radius:var(--m);box-shadow:var(--elev1);padding:16px;display:grid;gap:6px;align-content:start}
+.stat{font:500 1.75rem/2.25rem var(--brand)}
+.group{display:inline-flex;gap:2px;flex-wrap:wrap}
+.group button{height:40px;min-height:48px;padding:0 16px;border:0;border-radius:var(--s);background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container);font:600 .875rem/1.25rem var(--plain)}
+.group button:first-child{border-start-start-radius:var(--full);border-end-start-radius:var(--full)}
+.group button:last-child{border-start-end-radius:var(--full);border-end-end-radius:var(--full)}
+.group button[aria-checked="true"]{border-radius:var(--full);background:var(--md-sys-color-secondary);color:var(--md-sys-color-on-secondary)}
+.interactive{position:relative;isolation:isolate;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.interactive::before{content:"";position:absolute;inset:0;border-radius:inherit;background:currentColor;opacity:0;pointer-events:none;transition:opacity var(--fast-effects)}
+.interactive:hover::before{opacity:.08}.interactive:active::before{opacity:.1}
 .interactive:focus-visible{outline:3px solid var(--md-sys-color-secondary);outline-offset:2px}
-/* Buttons: S=40/16, M=56/24, press morph full->8/12 */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;border-radius:var(--corner-full);transition:border-radius var(--spring-fast-spatial),background-color var(--spring-fast-effects),color var(--spring-fast-effects)}
-.btn:active{border-radius:var(--corner-s)}
-.btn-m{height:56px;padding-inline:24px}
-.btn-filled{background:var(--md-sys-color-primary);color:var(--md-sys-color-on-primary)}
-.btn-tonal{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}
-.btn-text{background:transparent;color:var(--md-sys-color-primary);padding-inline:12px}
-/* Connected button group (replaces segmented) */
-.group{display:inline-flex;gap:2px}
-.group>.btn{height:40px;min-height:48px;padding-inline:16px;border-radius:var(--corner-s);background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}
-.group>.btn:first-child{border-start-start-radius:var(--corner-full);border-end-start-radius:var(--corner-full)}
-.group>.btn:last-child{border-start-end-radius:var(--corner-full);border-end-end-radius:var(--corner-full)}
-.group>.btn[aria-checked="true"]{border-radius:var(--corner-full);background:var(--md-sys-color-secondary);color:var(--md-sys-color-on-secondary)}
-/* Hero moment (the single one on this page) */
-.hero{background:var(--md-sys-color-primary-container);color:var(--md-sys-color-on-primary-container);border-radius:var(--corner-xxl);padding:32px;display:grid;gap:8px;animation:enter var(--spring-slow-effects)}
-.hero .row{display:flex;flex-wrap:wrap;gap:12px;align-items:end;justify-content:space-between}
-.hero .sub{color:var(--md-sys-color-on-primary-container);opacity:.85}
-@keyframes enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-/* Cards */
-.grid{display:grid;grid-template-columns:1fr;gap:12px}
-@media(min-width:600px){.grid{grid-template-columns:repeat(2,1fr)}}
-@media(min-width:840px){.grid{grid-template-columns:repeat(4,1fr)}.two{grid-template-columns:1.4fr 1fr}}
-.card{background:var(--md-sys-color-surface-container-low);border-radius:var(--corner-m);box-shadow:var(--elev1);padding:16px;display:grid;gap:6px;align-content:start}
-.card.filled{background:var(--md-sys-color-surface-container-highest);box-shadow:none}
-section.card{padding:20px}
-.stat-num{font:500 1.75rem/2.25rem var(--md-ref-typeface-brand)}
-/* Expressive segmented list */
-.seglist{background:var(--md-sys-color-surface-container);border-radius:var(--corner-l);padding:2px;display:grid;gap:2px}
-.segitem{background:var(--md-sys-color-surface-container-low);border-radius:var(--corner-xs);padding:12px 16px;display:grid;gap:6px}
+.btn{border:0;border-radius:var(--full);height:40px;min-height:48px;padding:0 16px;font:600 .875rem/1.25rem var(--plain);transition:border-radius var(--fast-spatial),background-color var(--fast-effects)}
+.btn:active{border-radius:var(--s)}
+.btn-m{height:56px;padding:0 24px}
+.filled{background:var(--md-sys-color-primary);color:var(--md-sys-color-on-primary)}
+.tonal{background:var(--md-sys-color-secondary-container);color:var(--md-sys-color-on-secondary-container)}
+.text{background:transparent;color:var(--md-sys-color-primary)}
+.danger{background:transparent;color:var(--md-sys-color-error)}
+.seglist{display:grid;gap:2px;background:var(--md-sys-color-surface-container);border-radius:var(--l);padding:2px}
+.segitem{background:var(--md-sys-color-surface-container-low);border-radius:var(--xs);padding:12px 16px;display:grid;gap:6px}
 .segitem:first-child{border-start-start-radius:14px;border-start-end-radius:14px}
 .segitem:last-child{border-end-start-radius:14px;border-end-end-radius:14px}
-.segrow{display:flex;gap:12px;justify-content:space-between;align-items:baseline;flex-wrap:wrap}
+.row{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
 .mono{font-family:ui-monospace,Consolas,monospace;font-size:.8125rem;word-break:break-all}
-.bar{height:8px;border-radius:var(--corner-full);background:var(--md-sys-color-surface-container-highest);overflow:hidden}
-.bar>i{display:block;height:100%;border-radius:var(--corner-full);background:var(--md-sys-color-primary);transition:width var(--spring-default-spatial)}
-.bar.tertiary>i{background:var(--md-sys-color-tertiary)}
+.bar{height:8px;border-radius:var(--full);background:var(--md-sys-color-surface-container-highest);overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--md-sys-color-primary);border-radius:var(--full)}
 table{width:100%;border-collapse:collapse;font-size:.875rem}
-th,td{text-align:right;padding:10px 6px;border-bottom:1px solid var(--md-sys-color-outline-variant)}
+th,td{text-align:right;padding:10px 8px;border-bottom:1px solid var(--md-sys-color-outline-variant)}
 th:first-child,td:first-child{text-align:left}
-.ok{color:var(--md-sys-color-tertiary)} .warn{color:var(--md-sys-color-error)}
-code{background:var(--md-sys-color-surface-container-highest);border-radius:6px;padding:2px 6px}
-pre{background:var(--md-sys-color-inverse-surface);color:var(--md-sys-color-inverse-on-surface);border-radius:var(--corner-xl);padding:20px;overflow:auto;font-size:.8125rem;line-height:1.35rem}
-/* Floating toolbar (no nav bar on this page) */
-.toolbar{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;height:64px;display:flex;align-items:center;gap:4px;padding-inline:8px;border-radius:var(--corner-full);background:var(--md-sys-color-surface-container);box-shadow:var(--elev3);z-index:6}
-.toolbar .btn{height:48px;padding-inline:16px}
-.snackbar{position:fixed;left:50%;transform:translateX(-50%);bottom:96px;max-width:min(560px,92vw);background:var(--md-sys-color-inverse-surface);color:var(--md-sys-color-inverse-on-surface);border-radius:var(--corner-xs);box-shadow:var(--elev3);padding:14px 16px;display:none;z-index:7}
-.snackbar.show{display:block}
+.field{height:56px;border-radius:var(--xs);border:1px solid var(--md-sys-color-outline);background:transparent;color:inherit;padding:0 16px;font:400 1rem/1.5rem var(--plain);min-width:0}
+.field:focus{outline:none;border:2px solid var(--md-sys-color-primary)}
+select.field{border-radius:var(--full);height:40px;background:var(--md-sys-color-surface-container-highest);border:0;padding-right:32px}
+.thread{flex:1;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:8px 0 8px}
+.bubble{max-width:min(680px,92%);padding:12px 16px;border-radius:var(--xl);white-space:pre-wrap}
+.bubble.user{margin-left:auto;background:var(--md-sys-color-primary-container);color:var(--md-sys-color-on-primary-container);border-end-end-radius:var(--s)}
+.bubble.assistant{background:var(--md-sys-color-surface-container-low);box-shadow:var(--elev1);border-end-start-radius:var(--s)}
+.sources{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.sources a{text-decoration:none;color:var(--md-sys-color-on-secondary-container);background:var(--md-sys-color-secondary-container);border-radius:var(--s);padding:4px 10px;font:500 .75rem/1rem var(--plain);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meta{font:500 .75rem/1rem var(--plain);color:var(--md-sys-color-on-surface-variant);margin-top:6px}
+.composer{display:flex;gap:8px;align-items:flex-end}
+.composer textarea{flex:1;min-height:56px;max-height:160px;resize:none;border-radius:var(--xl);border:0;background:var(--md-sys-color-surface-container-high);color:inherit;padding:16px 20px;font:400 1rem/1.5rem var(--plain)}
+.composer textarea:focus{outline:3px solid var(--md-sys-color-secondary);outline-offset:2px}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.toggle[aria-pressed="true"]{background:var(--md-sys-color-primary);color:var(--md-sys-color-on-primary);border-radius:var(--m)}
+.empty{color:var(--md-sys-color-on-surface-variant);padding:48px 8px;text-align:center}
+.fresh{background:var(--md-sys-color-tertiary-container);color:var(--md-sys-color-on-tertiary-container);border-radius:var(--xl);padding:16px 20px;display:grid;gap:8px}
+.snack{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:var(--md-sys-color-inverse-surface);color:var(--md-sys-color-inverse-on-surface);border-radius:var(--xs);box-shadow:var(--elev3);padding:14px 16px;display:none;z-index:8;max-width:min(480px,92vw)}
+.snack.show{display:block}
+.load{display:inline-block;width:18px;height:18px;border-radius:var(--full);border:2px solid var(--md-sys-color-primary);border-right-color:transparent;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:599px){
+ .shell{grid-template-columns:1fr}
+ .rail{position:fixed;left:0;right:0;bottom:0;height:64px;flex-direction:row;justify-content:space-around;padding:0;background:var(--md-sys-color-surface-container);z-index:6}
+ .rail a{width:auto;flex:1}
+ .main{padding-bottom:64px}
+ #page-chat.on{height:calc(100vh - 64px - 64px)}
+ .content,.appbar{padding-left:16px;padding-right:16px}
+ .snack{bottom:80px}
+}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body>
-<header class="appbar" id="appbar">
-  <div class="logo" aria-hidden="true">🌫️</div>
-  <div><div class="title-l">Mistral Gateway</div><div class="label-m" style="color:var(--md-sys-color-on-surface-variant)">панель подписки · Material 3 Expressive</div></div>
-  <span class="pool-chip label-l" id="pool" role="status">pool: …</span>
-</header>
-<main>
-  <!-- Hero -->
-  <section class="hero" aria-label="Итого">
-    <span class="label-l">Всего токенов за период</span>
-    <div class="row"><span class="display-m" id="hero-total">—</span>
-      <button class="btn btn-m btn-filled interactive" id="refresh"><span>↻ Обновить</span></button></div>
-    <span class="sub body-m" id="hero-sub" style="color:inherit">загрузка…</span>
-    <div><div class="group" role="radiogroup" aria-label="Период" id="days">
-      <button class="btn interactive" role="radio" aria-checked="false" data-days="7"><span>7 дней</span></button>
-      <button class="btn interactive" role="radio" aria-checked="true" data-days="30"><span>30 дней</span></button>
-      <button class="btn interactive" role="radio" aria-checked="false" data-days="90"><span>90 дней</span></button>
-      <button class="btn interactive" role="radio" aria-checked="false" data-days="3650"><span>Всё</span></button>
-    </div></div>
-  </section>
-
-  <div class="grid" id="totals" aria-label="Сводка"></div>
-
-  <div class="grid two">
-    <section class="card" aria-label="По моделям"><span class="headline-s">По моделям</span>
-      <div class="seglist" id="models"><span class="body-m" style="padding:12px">Пока нет запросов.</span></div>
-      <span class="body-m">«Эквивалент PAYG» — сколько бы это стоило по Studio-тарифу для моделей с опубликованной ценой (GLM 5.3 Flash: $0.15 / $0.03 cached / $0.50 за 1M). Подписка Vibe — фикс, это не списания.</span>
-    </section>
-    <section class="card" aria-label="По дням"><span class="headline-s">По дням</span><div id="byday"></div></section>
-  </div>
-
-  <div class="grid two">
-    <section class="card filled" aria-label="Безопасность подписки"><span class="headline-s">🛡️ Подписка под защитой</span><div class="seglist" id="safety"></div>
-      <span class="body-m">Один аккаунт, без ротации ключей и обхода лимитов: при 429 гейтвей ждёт и повторяет тот же ключ. Так задумано, чтобы использование выглядело как обычный официальный клиент, а не как ферма.</span>
-    </section>
-    <section class="card" aria-label="Веб-поиск"><span class="headline-s">🔎 Веб-поиск</span>
-      <span class="body-m">Два пути: нативный Mistral <code>web_search</code> через Conversations API и серверный перехват в самом гейтвее (модель зовёт функцию → гейтвей гуглит → скармливает результат вторым запросом).</span>
-      <pre>POST /v1/conversations
-{"model":"zai-glm-5-3-flash",
- "inputs":"Свежие новости…",
- "tools":[{"type":"web_search"}]}</pre>
-    </section>
-  </div>
-
-  <section class="card" aria-label="Модели"><span class="headline-s">Модели CLI / API</span><div id="known"></div></section>
-</main>
-
-<nav class="toolbar" aria-label="Действия">
-  <button class="btn btn-filled interactive" id="tb-refresh"><span>↻ Обновить</span></button>
-  <button class="btn btn-tonal interactive" id="keybtn"><span>🔑 Ключ</span></button>
-  <button class="btn btn-text interactive" id="topbtn"><span>Наверх</span></button>
+<div class="shell">
+<nav class="rail" aria-label="Разделы">
+  <a href="#overview" data-page="overview"><span class="ind"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1z"/></svg></span>Обзор</a>
+  <a href="#chat" data-page="chat"><span class="ind"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H8l-4 3V5a1 1 0 0 1 1-1z"/></svg></span>Чат</a>
+  <a href="#keys" data-page="keys"><span class="ind"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 14a5 5 0 1 1 4.9-6H21v3h-2v2h-2v2h-3.1A5 5 0 0 1 7 14zm0-3a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg></span>Ключи</a>
+  <a href="#models" data-page="models"><span class="ind"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4 6h16v3H4zm0 5h16v3H4zm0 5h10v3H4z"/></svg></span>Модели</a>
 </nav>
-<div class="snackbar body-m" id="msg" aria-live="polite" style="color:var(--md-sys-color-inverse-on-surface)"></div>
+<div class="main">
+  <header class="appbar" id="appbar">
+    <h1 id="title">Обзор</h1>
+    <div class="status" id="status" role="status"><i class="dot"></i><b>…</b><span></span></div>
+  </header>
 
+  <div class="content page" id="page-overview">
+    <section class="hero">
+      <span class="label">Токенов за период</span>
+      <div class="row"><span class="display" id="hero">—</span></div>
+      <span class="muted" id="hero-sub">загрузка</span>
+      <div class="group" id="days" role="radiogroup" aria-label="Период">
+        <button class="interactive" role="radio" data-days="1" aria-checked="false">Сегодня</button>
+        <button class="interactive" role="radio" data-days="7" aria-checked="false">7 дней</button>
+        <button class="interactive" role="radio" data-days="30" aria-checked="true">30 дней</button>
+        <button class="interactive" role="radio" data-days="3650" aria-checked="false">Всё</button>
+      </div>
+    </section>
+    <div class="grid" id="totals"></div>
+    <section class="card"><span class="headline">По моделям</span><div class="seglist" id="models-usage"></div></section>
+    <section class="card"><span class="headline">По дням</span><div id="byday"></div></section>
+  </div>
+
+  <div class="page" id="page-chat">
+    <div class="tools">
+      <select id="model" class="field" aria-label="Модель">
+        <option value="mistral-small-latest">Small · быстро</option>
+        <option value="mistral-medium-latest">Medium</option>
+        <option value="zai-glm-5-3-flash">GLM 5.3 Flash</option>
+        <option value="mistral-large-4">Large 4</option>
+      </select>
+      <button class="btn toggle interactive" id="search" aria-pressed="true" type="button">Поиск включён</button>
+      <button class="btn text interactive" id="clear" type="button">Новый чат</button>
+    </div>
+    <div class="thread" id="thread"><div class="empty">Спроси что угодно. С поиском модель сама решает, когда открыть веб.</div></div>
+    <form class="composer" id="composer">
+      <textarea id="input" rows="1" placeholder="Сообщение" aria-label="Сообщение"></textarea>
+      <button class="btn btn-m filled interactive" type="submit">Отправить</button>
+    </form>
+  </div>
+
+  <div class="content page" id="page-keys">
+    <section class="card" id="server-key"><span class="headline">Серверный ключ</span><span class="muted">Уже стоит в настройках. Его и вставляй в клиент. Панель его не спрашивает.</span></section>
+    <section class="card">
+      <span class="headline">Новый ключ</span>
+      <form class="row" id="newkey">
+        <input class="field" id="keyname" placeholder="Название, например Open WebUI" aria-label="Название ключа" style="flex:1">
+        <button class="btn btn-m filled interactive" type="submit">Создать</button>
+      </form>
+      <div id="fresh"></div>
+    </section>
+    <section class="card"><span class="headline">Выданные ключи</span><div class="seglist" id="keylist"></div>
+      <span class="muted">Base URL для клиентов: <span class="mono" id="base"></span></span></section>
+  </div>
+
+  <div class="content page" id="page-models">
+    <section class="card"><span class="headline">Доступны по ключу</span><div id="live-models"></div></section>
+    <section class="card"><span class="headline">Справка</span><div id="known"></div></section>
+  </div>
+</div>
+</div>
+<div class="snack" id="snack" aria-live="polite"></div>
 <script>
-const fmt=n=>new Intl.NumberFormat('ru-RU').format(n||0);
 const $=id=>document.getElementById(id);
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let days=30;
-function headers(){const k=sessionStorage.getItem('gwkey');return k?{Authorization:'Bearer '+k}:{}}
-function snack(t){const m=$('msg');m.textContent=t;m.classList.add('show');clearTimeout(m._t);m._t=setTimeout(()=>m.classList.remove('show'),5000)}
-async function load(){
- try{
-  const [s,p]=await Promise.all([fetch('/api/stats?days='+days,{headers:headers()}),fetch('/pool/status',{headers:headers()})]);
-  if(s.status===401){snack('Нужен GATEWAY_KEY — кнопка «Ключ» внизу.');return}
-  if(!s.ok) throw new Error('stats '+s.status);
-  const st=await s.json(), pool=await p.json().catch(()=>null);
-  if(pool&&pool.accounts) $('pool').textContent='pool: '+pool.accounts.map(a=>a.name+(a.cooling?' ⏸':' ✅')).join(' · ');
-  const t=st.totals;
-  $('hero-total').textContent=fmt(t.total_tokens);
-  $('hero-sub').textContent=fmt(t.requests)+' запросов · с '+st.since+' · эквивалент PAYG по известным ценам: '+(t.est_cost_usd_known?'$'+t.est_cost_usd_known.toFixed(4):'—');
-  $('totals').innerHTML=[['Запросов',fmt(t.requests),'все аккаунты пула'],['Prompt',fmt(t.prompt_tokens),'cached: '+fmt(t.cached_tokens)],['Completion',fmt(t.completion_tokens),'ответы моделей'],['Эквивалент PAYG',t.est_cost_usd_known?'$'+t.est_cost_usd_known.toFixed(4):'—','не списания, а оценка']].map(x=>`<div class="card"><span class="label-l" style="color:var(--md-sys-color-on-surface-variant)">${x[0]}</span><span class="stat-num">${x[1]}</span><span class="body-m">${x[2]}</span></div>`).join('');
-  const mx=Math.max(1,...st.by_model.map(m=>m.total_tokens));
-  $('models').innerHTML=st.by_model.length?st.by_model.map(m=>`<div class="segitem"><div class="segrow"><span class="mono">${esc(m.model)}</span><b>${fmt(m.total_tokens)}</b></div><div class="bar"><i style="width:${Math.max(2,Math.round(m.total_tokens/mx*100))}%"></i></div><div class="segrow body-m"><span>${fmt(m.requests)} запр. · prompt ${fmt(m.prompt_tokens)} · cached ${fmt(m.cached_tokens)} · compl. ${fmt(m.completion_tokens)}</span><span>${m.est_cost_usd==null?'':'~$'+m.est_cost_usd.toFixed(4)}</span></div></div>`).join(''):'<span class="body-m" style="padding:12px">Пока нет запросов.</span>';
-  $('byday').innerHTML=st.by_day.length?'<table><tr><th>День</th><th>Запр.</th><th>Токены</th></tr>'+st.by_day.slice(0,14).map(d=>`<tr><td>${esc(d.day)}</td><td>${fmt(d.requests)}</td><td>${fmt(d.total_tokens)}</td></tr>`).join('')+'</table>':'<span class="body-m">Пусто.</span>';
-  const sf=st.safety||{};
-  const row=(ok,label,val)=>`<div class="segitem"><div class="segrow"><span>${ok?'✅':'⚠️'} ${label}</span><b>${esc(val)}</b></div></div>`;
-  $('safety').innerHTML=
-    row(!!sf.gateway_key_set,'GATEWAY_KEY задан',sf.gateway_key_set?'да':'НЕТ — опасно')+
-    row(true,'Привязка только к LAN',String(sf.bind||''))+
-    row(true,'Аккаунтов в пуле (без ротации)',(sf.accounts||[]).join(', ')||'—')+
-    row(true,'Лимит запросов / мин',sf.rate_limit_per_min?String(sf.rate_limit_per_min):'выкл')+
-    row(true,'Параллельных запросов, макс',String(sf.max_concurrent??'—'))+
-    row(!!sf.web_search,'Серверный веб-поиск',sf.web_search?('вкл · '+(sf.search_provider||'')):'выкл');
-  $('known').innerHTML='<table><tr><th>Модель</th><th>Контекст</th><th>Картинки</th><th>Reasoning</th><th>Цена /1M $</th></tr>'+st.known_models.map(m=>`<tr><td><span class="mono">${esc(m.id)}</span><br><span class="body-m">${esc(m.label)}</span></td><td>${fmt(m.context)}</td><td>${m.images?'да':'нет'}</td><td>${(m.reasoning||[]).join(', ')||'—'}</td><td>${m.price?esc(m.price.in+' / '+m.price.cached+' / '+m.price.out):'—'}</td></tr>`).join('')+'</table>';
- }catch(e){snack('Ошибка: '+e)}
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=n=>new Intl.NumberFormat('ru-RU').format(n||0);
+let days=30, chat=[], busy=false;
+function snack(t){const n=$('snack');n.textContent=t;n.classList.add('show');clearTimeout(n._t);n._t=setTimeout(()=>n.classList.remove('show'),4000)}
+async function copy(text){try{await navigator.clipboard.writeText(text);snack('Скопировано')}catch(e){snack('Не удалось скопировать')}}
+function page(){return (location.hash||'#overview').slice(1)}
+const titles={overview:'Обзор',chat:'Чат',keys:'Ключи',models:'Модели'};
+function show(){
+  const name=['overview','chat','keys','models'].includes(page())?page():'overview';
+  document.querySelectorAll('.rail a').forEach(a=>a.setAttribute('aria-current',a.dataset.page===name?'page':'false'));
+  ['overview','chat','keys','models'].forEach(id=>$('page-'+id).classList.toggle('on',id===name));
+  $('title').textContent=titles[name];
+  if(name==='overview') loadStats();
+  if(name==='keys') loadKeys();
+  if(name==='models') loadModels();
 }
-document.querySelectorAll('#days .btn').forEach(b=>b.onclick=()=>{document.querySelectorAll('#days .btn').forEach(x=>x.setAttribute('aria-checked','false'));b.setAttribute('aria-checked','true');days=b.dataset.days;load()});
-$('refresh').onclick=load;$('tb-refresh').onclick=load;
-$('keybtn').onclick=()=>{const k=prompt('GATEWAY_KEY',sessionStorage.getItem('gwkey')||'');if(k!==null){sessionStorage.setItem('gwkey',k);load()}};
-$('topbtn').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
-addEventListener('scroll',()=>$('appbar').classList.toggle('scrolled',scrollY>8),{passive:true});
-load();
+async function loadStatus(){
+  try{
+    const s=await (await fetch('/api/status')).json();
+    const box=$('status');
+    const on=(s.serving||[]).length;
+    box.innerHTML=`<i class="dot${on?'':' off'}"></i><b>${on?'Онлайн':'Пауза'}</b><span>${esc(s.plan_name||'')}</span>`;
+  }catch(e){$('status').innerHTML='<i class="dot off"></i><b>Нет связи</b>'}
+}
+async function loadStats(){
+  const st=await (await fetch('/api/stats?days='+days)).json();
+  const t=st.totals||{};
+  $('hero').textContent=fmt(t.total_tokens);
+  $('hero-sub').textContent=`${fmt(t.requests)} запросов · с ${st.since} · оценка PAYG ${t.est_cost_usd_known?'$'+t.est_cost_usd_known.toFixed(4):'—'}`;
+  $('totals').innerHTML=[['Запросы',fmt(t.requests)],['Prompt',fmt(t.prompt_tokens)],['Cached',fmt(t.cached_tokens)],['Ответ',fmt(t.completion_tokens)]].map(x=>`<div class="card"><span class="muted">${x[0]}</span><span class="stat">${x[1]}</span></div>`).join('');
+  const mx=Math.max(1,...(st.by_model||[]).map(m=>m.total_tokens));
+  $('models-usage').innerHTML=(st.by_model||[]).length?(st.by_model.map(m=>`<div class="segitem"><div class="row"><span class="mono">${esc(m.model)}</span><b>${fmt(m.total_tokens)}</b></div><div class="bar"><i style="width:${Math.max(2,Math.round(m.total_tokens/mx*100))}%"></i></div><span class="muted">${fmt(m.requests)} запр. · prompt ${fmt(m.prompt_tokens)} · ответ ${fmt(m.completion_tokens)}${m.est_cost_usd==null?'':' · ~$'+m.est_cost_usd.toFixed(4)}</span></div>`).join('')):'<div class="segitem"><span class="muted">Пока пусто. Напиши что-нибудь в чате.</span></div>';
+  $('byday').innerHTML=(st.by_day||[]).length?`<table><tr><th>День</th><th>Запросы</th><th>Токены</th></tr>${st.by_day.slice(0,14).map(d=>`<tr><td>${esc(d.day)}</td><td>${fmt(d.requests)}</td><td>${fmt(d.total_tokens)}</td></tr>`).join('')}</table>`:'<span class="muted">Пусто.</span>';
+  window._known=st.known_models||[];
+}
+function renderChat(){
+  const box=$('thread');
+  if(!chat.length && !busy){box.innerHTML='<div class="empty">Спроси что угодно. С поиском модель сама решает, когда открыть веб.</div>';return}
+  box.innerHTML=chat.map(m=>{
+    const sources=(m.sources||[]).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title||s.url)}</a>`).join('');
+    const meta=m.role==='assistant'&&m.ms?`<div class="meta">${m.searched?'поиск · ':''}${(m.ms/1000).toFixed(1)} с</div>`:'';
+    return `<div class="bubble ${m.role==='user'?'user':'assistant'}">${esc(m.content)}${sources?`<div class="sources">${sources}</div>`:''}${meta}</div>`;
+  }).join('')+(busy?'<div class="bubble assistant"><span class="load"></span></div>':'');
+  box.scrollTop=box.scrollHeight;
+}
+$('composer').onsubmit=async ev=>{
+  ev.preventDefault();
+  const text=$('input').value.trim();
+  if(!text||busy) return;
+  $('input').value='';
+  chat.push({role:'user',content:text});
+  busy=true; renderChat();
+  try{
+    const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      model:$('model').value, search:$('search').getAttribute('aria-pressed')==='true',
+      messages:chat.filter(m=>m.role==='user'||m.role==='assistant').map(m=>({role:m.role,content:m.content}))
+    })});
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error?.message||('HTTP '+res.status));
+    chat.push({role:'assistant',content:data.content,sources:data.sources,ms:data.ms,searched:data.searched});
+  }catch(e){chat.push({role:'assistant',content:'Ошибка: '+e.message})}
+  busy=false; renderChat();
+};
+$('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('composer').requestSubmit()}});
+$('search').onclick=()=>{const on=$('search').getAttribute('aria-pressed')!=='true';$('search').setAttribute('aria-pressed',on);$('search').textContent=on?'Поиск включён':'Поиск выключен'};
+$('clear').onclick=()=>{chat=[];renderChat()};
+async function loadKeys(){
+  $('base').textContent=location.origin+'/v1';
+  const data=await (await fetch('/api/keys')).json();
+  const sk=data.server_key;
+  $('server-key').innerHTML=sk?`<span class="headline">Серверный ключ</span><span class="muted">Уже прописан на сервере. Скопируй его в клиент — панель больше ничего не спрашивает.</span><div class="row"><span class="mono">${esc(sk.prefix)}</span><button class="btn tonal interactive" id="copy-server" type="button">Копировать</button></div>`:`<span class="headline">Серверный ключ</span><span class="muted">В .env нет GATEWAY_KEY.</span>`;
+  if(sk) $('copy-server').onclick=()=>copy(sk.key);
+  const rows=(data.keys||[]);
+  $('keylist').innerHTML=rows.length?rows.map(k=>`<div class="segitem"><div class="row"><div><b>${esc(k.name)}</b><div class="mono">${esc(k.prefix)}${k.revoked?' · отозван':''}</div></div><div class="muted">${fmt(k.requests)} запр.${k.last_used?' · '+esc(k.last_used.replace('T',' ')):''}</div>${k.revoked?'':`<button class="btn danger interactive" data-revoke="${k.id}" type="button">Отозвать</button>`}</div></div>`).join(''):'<div class="segitem"><span class="muted">Пока только серверный ключ.</span></div>';
+  document.querySelectorAll('[data-revoke]').forEach(b=>b.onclick=async()=>{await fetch('/api/keys/'+b.dataset.revoke,{method:'DELETE'});loadKeys()});
+}
+$('newkey').onsubmit=async ev=>{
+  ev.preventDefault();
+  const name=$('keyname').value.trim()||'Ключ';
+  const res=await fetch('/api/keys',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  const data=await res.json();
+  $('keyname').value='';
+  $('fresh').innerHTML=`<div class="fresh"><span class="label">Ключ «${esc(data.name)}» — покажется один раз</span><span class="mono">${esc(data.key)}</span><button class="btn filled interactive" id="copy-fresh" type="button">Копировать</button></div>`;
+  $('copy-fresh').onclick=()=>copy(data.key);
+  loadKeys();
+};
+async function loadModels(){
+  if(!window._known) await loadStats();
+  const live=await (await fetch('/api/models')).json();
+  const ids=(live.data||[]).map(m=>m.id);
+  $('live-models').innerHTML=ids.length?`<table><tr><th>ID</th></tr>${ids.map(id=>`<tr><td class="mono">${esc(id)}</td></tr>`).join('')}</table>`:'<span class="muted">Список не пришёл.</span>';
+  $('known').innerHTML=`<table><tr><th>Модель</th><th>Контекст</th><th>Картинки</th><th>Цена /1M</th></tr>${(window._known||[]).map(m=>`<tr><td><span class="mono">${esc(m.id)}</span><br><span class="muted">${esc(m.label)}</span></td><td>${fmt(m.context)}</td><td>${m.images?'да':'нет'}</td><td>${m.price?esc(m.price.in+' / '+m.price.cached+' / '+m.price.out):'—'}</td></tr>`).join('')}</table>`;
+}
+document.querySelectorAll('#days button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#days button').forEach(x=>x.setAttribute('aria-checked','false'));b.setAttribute('aria-checked','true');days=+b.dataset.days;loadStats()});
+addEventListener('hashchange',show);
+addEventListener('scroll',()=>$('appbar').classList.toggle('scrolled',scrollY>4),{passive:true});
+if(!location.hash) location.hash='#overview';
+show(); loadStatus();
 </script></body></html>

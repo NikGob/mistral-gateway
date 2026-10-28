@@ -49,6 +49,10 @@ All of them handle tool calls. Clients can send any standard `reasoning_effort` 
 Fork of `Classic298/mistral-gateway` 1.0.4 with a security audit (see
 [`AUDIT.md`](AUDIT.md), including the Russia/RF-IP account-risk section) and:
 
+- **Panel** at `/` with four pages: overview, chat, API keys, models.
+  It never asks for a key. The Vibe key stays in `.env`; the Keys page shows
+  the server client-key and can mint more. Chat search uses Mistral's own
+  `web_search` and is not injected into the proxy, so CLI sessions stay clean.
 - **Web panel (Material Design 3)** at `/` or `/panel`: token totals, per-model
   and per-day usage, key-pool status, and the equivalent pay-as-you-go value
   for models with a published price (e.g. GLM 5.3 Flash at $0.15/$0.03/$0.50

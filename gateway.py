@@ -198,6 +198,7 @@ class KeyPool:
 
 
 POOL: KeyPool | None = None  # set in main()
+RUNTIME = {"plan_name": "", "plan_type": ""}
 USAGE_DB_LOCK = threading.Lock()
 MODELS_CACHE: dict = {"at": 0.0, "payload": None}
 MODELS_CACHE_TTL = 600.0
@@ -241,7 +242,68 @@ def usage_db() -> sqlite3.Connection:
         "cached_tokens INTEGER DEFAULT 0, completion_tokens INTEGER DEFAULT 0,"
         "PRIMARY KEY (day, model, account))"
     )
+    connection.execute(
+        "CREATE TABLE IF NOT EXISTS client_keys ("
+        "id INTEGER PRIMARY KEY, name TEXT NOT NULL, prefix TEXT NOT NULL,"
+        "key_hash TEXT NOT NULL UNIQUE, created TEXT NOT NULL,"
+        "last_used TEXT, requests INTEGER DEFAULT 0, revoked INTEGER DEFAULT 0)"
+    )
     return connection
+
+
+def _touch_client_key(digest: str) -> bool:
+    with USAGE_DB_LOCK:
+        with usage_db() as connection:
+            row = connection.execute(
+                "SELECT id FROM client_keys WHERE key_hash = ? AND revoked = 0", (digest,)
+            ).fetchone()
+            if not row:
+                return False
+            connection.execute(
+                "UPDATE client_keys SET last_used = ?, requests = requests + 1 WHERE id = ?",
+                (time.strftime("%Y-%m-%dT%H:%M:%S"), row[0]),
+            )
+            return True
+
+
+def client_key_valid(presented: str) -> bool:
+    if not presented:
+        return False
+    return _touch_client_key(hashlib.sha256(presented.encode()).hexdigest())
+
+
+def list_client_keys() -> list[dict]:
+    with USAGE_DB_LOCK:
+        with usage_db() as connection:
+            rows = connection.execute(
+                "SELECT id, name, prefix, created, last_used, requests, revoked"
+                " FROM client_keys ORDER BY id DESC"
+            ).fetchall()
+    columns = ("id", "name", "prefix", "created", "last_used", "requests", "revoked")
+    return [dict(zip(columns, row)) for row in rows]
+
+
+def create_client_key(name: str) -> dict:
+    import secrets
+    token = "mgw-" + secrets.token_hex(24)
+    prefix = token[:8] + "…" + token[-4:]
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    created = time.strftime("%Y-%m-%dT%H:%M:%S")
+    with USAGE_DB_LOCK:
+        with usage_db() as connection:
+            cursor = connection.execute(
+                "INSERT INTO client_keys (name, prefix, key_hash, created) VALUES (?, ?, ?, ?)",
+                (name[:60] or "Ключ", prefix, digest, created),
+            )
+            key_id = cursor.lastrowid
+    return {"id": key_id, "name": name[:60] or "Ключ", "prefix": prefix, "key": token, "created": created}
+
+
+def revoke_client_key(key_id: int) -> bool:
+    with USAGE_DB_LOCK:
+        with usage_db() as connection:
+            cursor = connection.execute("UPDATE client_keys SET revoked = 1 WHERE id = ? AND revoked = 0", (key_id,))
+            return cursor.rowcount > 0
 
 
 def record_usage(model: str, account: str, usage: dict) -> None:
@@ -273,7 +335,7 @@ def record_usage(model: str, account: str, usage: dict) -> None:
             LOG.warning("usage write failed: %s", error)
 
 
-def upstream_request(url: str, key: str, body: bytes | None, method: str = "POST", gzip_response: bool = False):
+def upstream_request(url: str, key: str, body: bytes | None, method: str = "POST", gzip_response: bool = False, timeout: int = 600):
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     if gzip_response:
         # Without this, api.mistral.ai drips large JSON (e.g. /v1/models)
@@ -281,7 +343,7 @@ def upstream_request(url: str, key: str, body: bytes | None, method: str = "POST
         # gzipped the same list arrives in <0.5 s (19 KB -> 2.8 KB).
         headers["Accept-Encoding"] = "gzip"
     request = urllib.request.Request(url, data=body, method=method, headers=headers)
-    return urllib.request.urlopen(request, timeout=600)
+    return urllib.request.urlopen(request, timeout=timeout)
 
 
 def read_upstream_bytes(response) -> bytes:
@@ -296,13 +358,13 @@ def read_upstream_bytes(response) -> bytes:
 
 
 def upstream_request_with_retry(
-    url: str, key: str, name: str, body: bytes | None, method: str = "POST", gzip_response: bool = False
+    url: str, key: str, name: str, body: bytes | None, method: str = "POST", gzip_response: bool = False, timeout: int = 600
 ):
     """Like upstream_request, but a 429 retries the same key within the window."""
     deadline = time.time() + RETRY_429["seconds"]
     while True:
         try:
-            return upstream_request(url, key, body, method, gzip_response)
+            return upstream_request(url, key, body, method, gzip_response, timeout)
         except urllib.error.HTTPError as error:
             if error.code != 429:
                 raise
@@ -595,6 +657,42 @@ def collect_stats(window_days: int) -> dict:
 PANEL_HTML = (pathlib.Path(__file__).parent / "panel.html").read_text(encoding="utf-8")
 
 
+def conversation_text_and_sources(payload: dict) -> tuple[str, list[dict]]:
+    """Pull the assistant text and search links out of a Conversations reply."""
+    texts: list[str] = []
+    sources: list[dict] = []
+    seen: set[str] = set()
+    for out in payload.get("outputs") or []:
+        if not isinstance(out, dict):
+            continue
+        if out.get("name") == "web_search" or out.get("type") == "tool.execution":
+            raw = (out.get("info") or {}).get("result") if isinstance(out.get("info"), dict) else None
+            try:
+                data = json.loads(raw) if isinstance(raw, str) else raw
+            except ValueError:
+                data = None
+            items = data.values() if isinstance(data, dict) else (data or [])
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                url = item.get("url") or ""
+                if url and url not in seen:
+                    seen.add(url)
+                    sources.append({"title": item.get("title") or url, "url": url})
+        if out.get("type") not in ("message.output", "message"):
+            continue
+        content = out.get("content")
+        if isinstance(content, str):
+            texts.append(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, str):
+                    texts.append(part)
+                elif isinstance(part, dict) and isinstance(part.get("text"), str):
+                    texts.append(part["text"])
+    return "\n".join(part.strip() for part in texts if part and part.strip()), sources[:6]
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -614,12 +712,31 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _presented_key(self) -> str:
+        return self.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+
     def _authorized(self) -> bool:
+        """Client API keys. The panel does not use this: it is the LAN admin UI."""
+        presented = self._presented_key()
         expected = os.environ.get("GATEWAY_KEY", "")
-        if not expected:
-            return True  # keyless on loopback
-        auth = self.headers.get("Authorization", "")
-        return hmac.compare_digest(auth.removeprefix("Bearer "), expected)
+        if expected and presented and hmac.compare_digest(presented, expected):
+            return True
+        if presented and client_key_valid(presented):
+            return True
+        return not expected  # keyless only when no server key is configured
+
+    def _read_json(self) -> dict | None:
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return None
+        if length < 0 or length > MAX_BODY_BYTES_DEFAULT:
+            return None
+        try:
+            parsed = json.loads(self.rfile.read(length) or b"{}")
+        except ValueError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
 
     def _host_allowed(self) -> bool:
         """Keyless mode only answers loopback hostnames, which blocks DNS rebinding."""
@@ -827,6 +944,26 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(data)
             return
+        if route == "/api/status":
+            serving = [account.name for account in POOL.accounts_for()] if POOL else []
+            return self._reply(200, {
+                "ok": True,
+                "plan_name": RUNTIME["plan_name"],
+                "plan_type": RUNTIME["plan_type"],
+                "serving": serving,
+                "search": "conversations",
+            })
+        if route == "/api/keys":
+            env_key = os.environ.get("GATEWAY_KEY", "")
+            return self._reply(200, {
+                "server_key": {
+                    "name": "Серверный",
+                    "prefix": (env_key[:8] + "…" + env_key[-4:]) if env_key else "",
+                    "key": env_key,
+                    "source": "env",
+                } if env_key else None,
+                "keys": list_client_keys(),
+            })
         if route == "/health":
             if os.environ.get("GATEWAY_KEY") and not self._authorized():
                 return self._reply(200, {"ok": True})
@@ -835,9 +972,9 @@ class Handler(BaseHTTPRequestHandler):
                 "accounts": len(POOL.accounts),
                 "serving": len(POOL.accounts_for()),
             })
-        if not self._authorized():
+        if route not in ("/api/stats", "/pool/status", "/api/models") and not self._authorized():
             return self._reply(401, {"error": {"message": "unauthorized"}})
-        if route in ("/v1/models", "/models"):
+        if route in ("/v1/models", "/models", "/api/models"):
             if MODELS_CACHE["payload"] is not None and time.time() - MODELS_CACHE["at"] < MODELS_CACHE_TTL:
                 return self._reply(200, MODELS_CACHE["payload"])
             for account in POOL.accounts_for():
@@ -923,9 +1060,114 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(200, {"usage": [dict(zip(columns, row)) for row in rows]})
         return self._reply(404, {"error": {"message": f"unknown route {self.path}"}})
 
+    def do_DELETE(self):
+        if not self._host_allowed():
+            return self._reply(403, {"error": {"message": "forbidden host"}})
+        route = self.path.partition("?")[0]
+        prefix = "/api/keys/"
+        if not route.startswith(prefix) or not route[len(prefix):].isdigit():
+            return self._reply(404, {"error": {"message": "unknown route"}})
+        if not revoke_client_key(int(route[len(prefix):])):
+            return self._reply(404, {"error": {"message": "key not found"}})
+        return self._reply(200, {"ok": True})
+
+    def _api_chat(self) -> None:
+        """Panel chat. Search goes through Mistral's own web_search, and only
+        when the toggle is on — the coding proxy path stays untouched."""
+        if not _rate_ok():
+            return self._reply(429, {"error": {"message": "gateway rate limit", "type": "rate_limit"}})
+        request = self._read_json()
+        if not request:
+            return self._reply(400, {"error": {"message": "invalid JSON body"}})
+        messages = request.get("messages")
+        if not isinstance(messages, list) or not messages:
+            return self._reply(400, {"error": {"message": "messages required"}})
+        model = str(request.get("model") or "mistral-small-latest")
+        search = bool(request.get("search"))
+        account = POOL.accounts_for()[0]
+        started = time.perf_counter()
+        if not _concurrency.acquire(blocking=False):
+            return self._reply(429, {"error": {"message": "gateway busy", "type": "rate_limit"}})
+        try:
+            if search:
+                instructions = "\n".join(
+                    str(item.get("content") or "") for item in messages
+                    if isinstance(item, dict) and item.get("role") == "system"
+                )
+                inputs = [
+                    {"role": item.get("role"), "content": str(item.get("content") or "")}
+                    for item in messages
+                    if isinstance(item, dict) and item.get("role") in ("user", "assistant") and item.get("content")
+                ][-24:]
+                upstream_body = {"model": model, "inputs": inputs, "tools": [{"type": "web_search"}], "stream": False}
+                if instructions.strip():
+                    upstream_body["instructions"] = instructions.strip()[:4000]
+                url = MISTRAL_CONVERSATIONS_URL
+            else:
+                upstream_body = {
+                    "model": model,
+                    "messages": [
+                        {"role": item.get("role"), "content": str(item.get("content") or "")}
+                        for item in messages if isinstance(item, dict) and item.get("role") in ("system", "user", "assistant")
+                    ][-24:],
+                    "max_tokens": 4096 if "glm" in model else 2048,
+                    "stream": False,
+                }
+                url = MISTRAL_CHAT_URL
+            try:
+                upstream = upstream_request_with_retry(
+                    url, account.key, account.name, json.dumps(upstream_body).encode(),
+                    gzip_response=True, timeout=90,
+                )
+            except urllib.error.HTTPError as error:
+                detail = b""
+                try:
+                    detail = error.read()
+                except OSError:
+                    pass
+                error.close()
+                return self._reply(error.code, {"error": {"message": detail.decode(errors="replace")[:400]}})
+            except OSError as error:
+                return self._reply(502, {"error": {"message": str(error)}})
+            try:
+                payload = json.loads(read_upstream_bytes(upstream))
+            finally:
+                upstream.close()
+        finally:
+            _concurrency.release()
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        if search:
+            text, sources = conversation_text_and_sources(payload if isinstance(payload, dict) else {})
+            record_usage(model, account.name, {})
+            return self._reply(200, {
+                "content": text or "Модель ничего не ответила.",
+                "sources": sources,
+                "searched": bool(sources),
+                "model": model,
+                "ms": elapsed_ms,
+            })
+        try:
+            message = payload["choices"][0]["message"]
+            text = message.get("content") or ""
+            if isinstance(text, list):
+                text, _reasoning = normalize_content_chunks(text)
+        except (KeyError, IndexError, TypeError):
+            text = ""
+        record_usage(payload.get("model") or model, account.name, payload.get("usage") or {})
+        return self._reply(200, {"content": text or "Модель ничего не ответила.", "sources": [], "searched": False, "model": payload.get("model") or model, "ms": elapsed_ms})
+
     def do_POST(self):
         if not self._host_allowed():
             return self._reply(403, {"error": {"message": "forbidden host"}})
+        route = self.path.partition("?")[0]
+        if route == "/api/chat":
+            return self._api_chat()
+        if route == "/api/keys":
+            request = self._read_json()
+            if request is None:
+                return self._reply(400, {"error": {"message": "invalid JSON body"}})
+            name = str(request.get("name") or "Ключ").strip() or "Ключ"
+            return self._reply(201, create_client_key(name))
         if not self._authorized():
             return self._reply(401, {"error": {"message": "unauthorized"}})
         if not _rate_ok():
@@ -1052,7 +1294,9 @@ def main() -> int:
         try:
             with upstream_request(MISTRAL_WHOAMI_URL, account.key, None, method="GET") as response:
                 whoami = json.loads(response.read())
-            LOG.info("vibe plan: %s (%s)", whoami.get("plan_name"), whoami.get("plan_type"))
+            RUNTIME["plan_name"] = str(whoami.get("plan_name") or "")
+            RUNTIME["plan_type"] = str(whoami.get("plan_type") or "")
+            LOG.info("vibe plan: %s (%s)", RUNTIME["plan_name"], RUNTIME["plan_type"])
         except (urllib.error.HTTPError, OSError, ValueError) as error:
             LOG.warning("vibe whoami failed (continuing anyway): %s", error)
 
