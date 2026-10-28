@@ -3,6 +3,9 @@ services:
     build: .
     container_name: mistral-gateway
     restart: unless-stopped
+    # Run as the host user so the bind-mounted ./data stays writable
+    # (the image's own user is 10001; adjust if your uid differs: id -u)
+    user: "1000:1000"
     env_file: .env
     environment:
       BIND: "0.0.0.0"
