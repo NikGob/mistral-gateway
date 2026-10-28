@@ -1,6 +1,6 @@
 FROM python:3.13-alpine
 WORKDIR /app
-COPY gateway.py /app/gateway.py
+COPY gateway.py panel.html /app/
 RUN adduser -D -u 10001 gateway && mkdir -p /data && chown gateway:gateway /data
 USER gateway
 ENV BIND=0.0.0.0 PORT=8788 DATA_DIR=/data PYTHONUNBUFFERED=1

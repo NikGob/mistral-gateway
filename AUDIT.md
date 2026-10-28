@@ -39,6 +39,16 @@ Single stdlib-only Python file. No dependency supply chain, no telemetry.
 
 ## Plain bugs
 
+0. **[fixed] `/v1/models` appeared to hang.** Without `Accept-Encoding:
+   gzip`, api.mistral.ai drips the uncompressed model list so slowly from
+   the Pi's network that clients time out (>20 s, partial body). Gzipped it
+   is 2.8 KB in 0.47 s. Non-streaming upstream calls now request gzip and
+   decompress transparently, and `/v1/models` is cached for 10 minutes.
+   Note from the live check: chat completions were never slow — only the
+   model list.
+
+## Plain bugs (upstream)
+
 1. **[fixed] POST routes broke on query strings** (`/v1/responses?x=1` → 404,
    and URL selection compared the raw `self.path`). Routes are now matched
    on the part before `?`.

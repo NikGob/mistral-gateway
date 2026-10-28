@@ -199,6 +199,35 @@ class KeyPool:
 
 POOL: KeyPool | None = None  # set in main()
 USAGE_DB_LOCK = threading.Lock()
+MODELS_CACHE: dict = {"at": 0.0, "payload": None}
+MODELS_CACHE_TTL = 600.0
+
+# --- anti-abuse guards (protect the single subscription account) --------
+_rate_lock = threading.Lock()
+_rate_hits: list[float] = []
+_concurrency = threading.BoundedSemaphore(6)
+MAX_CONCURRENT = 6
+
+
+def rate_limit_per_min() -> int:
+    try:
+        return max(0, int(os.environ.get("RATE_LIMIT_PER_MIN", "0")))
+    except ValueError:
+        return 0
+
+
+def _rate_ok() -> bool:
+    limit = rate_limit_per_min()
+    if not limit:
+        return True
+    now = time.monotonic()
+    with _rate_lock:
+        while _rate_hits and now - _rate_hits[0] > 60:
+            _rate_hits.pop(0)
+        if len(_rate_hits) >= limit:
+            return False
+        _rate_hits.append(now)
+        return True
 
 
 def usage_db() -> sqlite3.Connection:
@@ -244,24 +273,36 @@ def record_usage(model: str, account: str, usage: dict) -> None:
             LOG.warning("usage write failed: %s", error)
 
 
-def upstream_request(url: str, key: str, body: bytes | None, method: str = "POST"):
-    request = urllib.request.Request(
-        url,
-        data=body,
-        method=method,
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-    )
+def upstream_request(url: str, key: str, body: bytes | None, method: str = "POST", gzip_response: bool = False):
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    if gzip_response:
+        # Without this, api.mistral.ai drips large JSON (e.g. /v1/models)
+        # uncompressed so slowly from some networks that clients time out;
+        # gzipped the same list arrives in <0.5 s (19 KB -> 2.8 KB).
+        headers["Accept-Encoding"] = "gzip"
+    request = urllib.request.Request(url, data=body, method=method, headers=headers)
     return urllib.request.urlopen(request, timeout=600)
 
 
+def read_upstream_bytes(response) -> bytes:
+    raw = response.read()
+    if (response.headers.get("Content-Encoding") or "").lower() == "gzip":
+        import gzip as _gzip
+        try:
+            return _gzip.decompress(raw)
+        except OSError:
+            return raw
+    return raw
+
+
 def upstream_request_with_retry(
-    url: str, key: str, name: str, body: bytes | None, method: str = "POST"
+    url: str, key: str, name: str, body: bytes | None, method: str = "POST", gzip_response: bool = False
 ):
     """Like upstream_request, but a 429 retries the same key within the window."""
     deadline = time.time() + RETRY_429["seconds"]
     while True:
         try:
-            return upstream_request(url, key, body, method)
+            return upstream_request(url, key, body, method, gzip_response)
         except urllib.error.HTTPError as error:
             if error.code != 429:
                 raise
@@ -415,6 +456,101 @@ def snap_reasoning_effort(body: bytes, detail: bytes) -> bytes | None:
     return json.dumps(chat_request).encode()
 
 
+WEB_SEARCH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "web_search",
+        "description": (
+            "Search the public web for current or external information. "
+            "Use this when the answer may need up-to-date facts, news, "
+            "prices, versions, or sources beyond your training data."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "Search query"}},
+            "required": ["query"],
+        },
+    },
+}
+
+
+def search_enabled() -> bool:
+    return os.environ.get("WEB_SEARCH", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _strip_tags(fragment: str) -> str:
+    import html as _html
+    import re as _re
+    return _html.unescape(_re.sub(r"<[^>]+>", " ", fragment)).strip()
+
+
+def _search_ddg(query: str, limit: int = 5) -> list[dict]:
+    """DuckDuckGo HTML endpoint, stdlib only, no key needed."""
+    import re as _re
+    import urllib.parse as _parse
+    url = "https://html.duckduckgo.com/html/?" + _parse.urlencode({"q": query})
+    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (mistral-gateway)"})
+    with urllib.request.urlopen(request, timeout=20) as response:
+        page = response.read().decode("utf-8", errors="replace")
+    results = []
+    for match in _re.finditer(
+        r'class="result__a" href="([^"]+)"[^>]*>(.*?)</a>.*?class="result__snippet"[^>]*>(.*?)</a>',
+        page, _re.S,
+    ):
+        href, title, snippet = match.groups()
+        parsed = _parse.urlparse(href)
+        real = _parse.parse_qs(parsed.query).get("uddg", [href])[0]
+        results.append({"title": _strip_tags(title), "url": real, "snippet": _strip_tags(snippet)})
+        if len(results) >= limit:
+            break
+    return results
+
+
+def _search_tavily(query: str, limit: int = 5) -> list[dict]:
+    body = json.dumps({"query": query, "max_results": limit, "search_depth": "basic"}).encode()
+    request = urllib.request.Request(
+        "https://api.tavily.com/search", data=body, method="POST",
+        headers={"Authorization": f"Bearer {os.environ['SEARCH_API_KEY']}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        data = json.loads(response.read())
+    return [{"title": r.get("title", ""), "url": r.get("url", ""), "snippet": (r.get("content") or "")[:600]} for r in data.get("results", [])]
+
+
+def _search_serper(query: str, limit: int = 5) -> list[dict]:
+    body = json.dumps({"q": query, "num": limit}).encode()
+    request = urllib.request.Request(
+        "https://google.serper.dev/search", data=body, method="POST",
+        headers={"X-API-KEY": os.environ["SEARCH_API_KEY"], "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        data = json.loads(response.read())
+    return [{"title": r.get("title", ""), "url": r.get("link", ""), "snippet": r.get("snippet", "")} for r in data.get("organic", [])]
+
+
+def do_web_search(query: str) -> str:
+    """Run the configured provider and format results as tool content."""
+    provider = os.environ.get("SEARCH_PROVIDER", "").strip().lower()
+    if not provider:
+        provider = "tavily" if os.environ.get("SEARCH_API_KEY") else "ddg"
+    try:
+        if provider == "tavily":
+            results = _search_tavily(query)
+        elif provider == "serper":
+            results = _search_serper(query)
+        else:
+            results = _search_ddg(query)
+    except Exception as error:  # search failure must not kill the chat reply
+        LOG.warning("web_search (%s) failed: %s", provider, error)
+        return f"web_search failed ({provider}): {error}. Answer without search results and say so."
+    if not results:
+        return f"web_search ({provider}) found no results for: {query}"
+    lines = [f"Web search results ({provider}) for: {query}"]
+    for i, r in enumerate(results, 1):
+        lines.append(f"\n[{i}] {r['title']}\n{r['url']}\n{r['snippet']}")
+    return "\n".join(lines)[:8000]
+
+
 def estimate_cost_usd(model: str, prompt: int, cached: int, completion: int):
     """Equivalent PAYG value in USD, or None when no published price is known."""
     info = KNOWN_BY_ID.get(model)
@@ -456,59 +592,7 @@ def collect_stats(window_days: int) -> dict:
             "known_models": KNOWN_MODELS}
 
 
-PANEL_HTML = r"""<!doctype html><html lang="ru"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Mistral Gateway</title>
-<style>
-:root{--p:#6750a4;--onp:#fff;--pc:#eaddff;--onpc:#21005d;--bg:#fef7ff;--sf:#fef7ff;--sfc:#f3edf7;--sfch:#ece6f0;--txt:#1d1b20;--mut:#49454f;--out:#79747e;--err:#b3261e;--ok:#146c2e;--radius:28px}
-@media(prefers-color-scheme:dark){:root{--p:#d0bcff;--onp:#381e72;--pc:#4f378b;--onpc:#eaddff;--bg:#141218;--sf:#141218;--sfc:#211f26;--sfch:#2b2930;--txt:#e6e0e9;--mut:#cac4d0;--out:#938f99}}
-*{box-sizing:border-box}body{margin:0;font-family:Roboto,system-ui,'Segoe UI',sans-serif;background:var(--bg);color:var(--txt)}
-header{position:sticky;top:0;background:var(--sfc);padding:16px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;z-index:2}
-h1{font-size:22px;margin:0;font-weight:500}.chip{background:var(--pc);color:var(--onpc);border-radius:8px;padding:4px 10px;font-size:12px}
-main{max-width:1100px;margin:0 auto;padding:20px;display:grid;gap:16px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
-.card{background:var(--sfc);border-radius:var(--radius);padding:20px}.card h2{font-size:14px;color:var(--mut);margin:0 0 8px;font-weight:500}
-.big{font-size:30px;font-weight:500}.sub{color:var(--mut);font-size:13px}
-button,select{background:var(--p);color:var(--onp);border:0;border-radius:20px;padding:10px 18px;font-size:14px;cursor:pointer}
-select{background:var(--sfch);color:var(--txt)}button.tonal{background:var(--pc);color:var(--onpc)}
-table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:right;padding:8px 6px;border-bottom:1px solid var(--out)}th:first-child,td:first-child{text-align:left}
-.bar{height:8px;background:var(--sfch);border-radius:4px;overflow:hidden}.bar>i{display:block;height:100%;background:var(--p)}
-.err{color:var(--err)}.ok{color:var(--ok)}code{background:var(--sfch);padding:2px 6px;border-radius:6px}
-</style></head><body>
-<header><h1>🌫️ Mistral Gateway</h1><span class="chip" id="pool">pool: …</span>
-<select id="days"><option value="7">7 дней</option><option value="30" selected>30 дней</option><option value="90">90 дней</option><option value="3650">Всё время</option></select>
-<button class="tonal" id="keybtn">🔑 Ключ</button><button id="refresh">Обновить</button></header>
-<main>
-<div class="grid" id="totals"></div>
-<section class="card"><h2>По моделям (токены и эквивалент PAYG, $)</h2><div id="models"></div>
-<p class="sub">Эквивалент PAYG считается только для моделей с опубликованной ценой (GLM 5.3 Flash: $0.15 / $0.03 cached / $0.50 за 1M). Трафик Vibe-плана оплачен подпиской — это не списанные деньги, а «сколько бы это стоило по Studio-тарифу».</p></section>
-<section class="card"><h2>По дням</h2><div id="byday"></div></section>
-<section class="card"><h2>Известные модели CLI / API</h2><div id="known"></div>
-<p class="sub">Поиск по вебу: через <code>POST /v1/conversations</code> с <code>tools:[{"type":"web_search"}]</code> (или <code>web_search_premium</code>). В обычном <code>/v1/chat/completions</code> Mistral веб-поиск не поддерживает.</p></section>
-<p class="sub" id="msg"></p>
-</main>
-<script>
-const fmt=n=>new Intl.NumberFormat('ru-RU').format(n||0);
-const $=id=>document.getElementById(id);
-function headers(){const k=sessionStorage.getItem('gwkey');return k?{Authorization:'Bearer '+k}:{}}
-async function load(){
- $('msg').textContent='';
- try{
-  const [s,p]=await Promise.all([fetch('/api/stats?days='+$('days').value,{headers:headers()}),fetch('/pool/status',{headers:headers()})]);
-  if(s.status===401){$('msg').innerHTML='<span class="err">Нужен GATEWAY_KEY — нажми «Ключ».</span>';return}
-  const st=await s.json(), pool=await p.json().catch(()=>null);
-  if(pool&&pool.accounts) $('pool').textContent='pool: '+pool.accounts.map(a=>a.name+(a.cooling?' ⏸':' ✅')).join(' · ')+' → '+(pool.serving||[]).join(',');
-  const t=st.totals;
-  $('totals').innerHTML=[['Запросов',fmt(t.requests),''],['Токенов всего',fmt(t.total_tokens),'prompt + completion'],['Prompt',fmt(t.prompt_tokens),'из них cached: '+fmt(t.cached_tokens)],['Completion',fmt(t.completion_tokens),''],['Эквивалент PAYG (известные цены)',t.est_cost_usd_known?'$'+t.est_cost_usd_known.toFixed(4):'—','только модели с ценой']].map(x=>`<div class="card"><h2>${x[0]}</h2><div class="big">${x[1]}</div><div class="sub">${x[2]}</div></div>`).join('');
-  const mx=Math.max(1,...st.by_model.map(m=>m.total_tokens));
-  $('models').innerHTML=st.by_model.length?'<table><tr><th>Модель</th><th>Запр.</th><th>Prompt</th><th>Cached</th><th>Completion</th><th>Всего</th><th>~$</th></tr>'+st.by_model.map(m=>`<tr><td>${m.model}<div class="bar"><i style="width:${Math.round(m.total_tokens/mx*100)}%"></i></div></td><td>${fmt(m.requests)}</td><td>${fmt(m.prompt_tokens)}</td><td>${fmt(m.cached_tokens)}</td><td>${fmt(m.completion_tokens)}</td><td>${fmt(m.total_tokens)}</td><td>${m.est_cost_usd==null?'—':'$'+m.est_cost_usd.toFixed(4)}</td></tr>`).join('')+'</table>':'<p class="sub">Пока нет запросов.</p>';
-  $('byday').innerHTML=st.by_day.length?'<table><tr><th>День</th><th>Запр.</th><th>Всего токенов</th></tr>'+st.by_day.map(d=>`<tr><td>${d.day}</td><td>${fmt(d.requests)}</td><td>${fmt(d.total_tokens)}</td></tr>`).join('')+'</table>':'<p class="sub">Пусто.</p>';
-  $('known').innerHTML='<table><tr><th>Модель</th><th>Контекст</th><th>Картинки</th><th>Reasoning</th><th>Цена /1M</th></tr>'+st.known_models.map(m=>`<tr><td><code>${m.id}</code> ${m.label}</td><td>${fmt(m.context)}</td><td>${m.images?'да':'нет'}</td><td>${(m.reasoning||[]).join(', ')||'—'}</td><td>${m.price?'$'+m.price.in+' / $'+m.price.cached+' / $'+m.price.out:'—'}</td></tr>`).join('')+'</table>';
- }catch(e){$('msg').innerHTML='<span class="err">'+e+'</span>'}
-}
-$('refresh').onclick=load;$('days').onchange=load;
-$('keybtn').onclick=()=>{const k=prompt('GATEWAY_KEY',sessionStorage.getItem('gwkey')||'');if(k!==null){sessionStorage.setItem('gwkey',k);load()}};
-load();
-</script></body></html>"""
+PANEL_HTML = (pathlib.Path(__file__).parent / "panel.html").read_text(encoding="utf-8")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -549,7 +633,15 @@ class Handler(BaseHTTPRequestHandler):
         LOG.warning("rejected Host %r: set GATEWAY_KEY to allow other hostnames", host)
         return False
 
-    def _proxy_body(self, body: bytes, stream: bool, _snap_depth: int = 0) -> None:
+    def _proxy_body(self, body: bytes, stream: bool, _snap_depth: int = 0, _search_round: int = 0) -> None:
+        if not _concurrency.acquire(blocking=False):
+            return self._reply(429, {"error": {"message": "gateway busy: too many concurrent requests", "type": "rate_limit"}})
+        try:
+            return self._proxy_body_inner(body, stream, _snap_depth, _search_round)
+        finally:
+            _concurrency.release()
+
+    def _proxy_body_inner(self, body: bytes, stream: bool, _snap_depth: int = 0, _search_round: int = 0) -> None:
         """Try accounts in pool order; stream the winning response downstream."""
         last_error = None
         route = self.path.partition("?")[0]
@@ -562,7 +654,7 @@ class Handler(BaseHTTPRequestHandler):
         for account in POOL.accounts_for():
             try:
                 upstream = upstream_request_with_retry(
-                    url, account.key, account.name, body
+                    url, account.key, account.name, body, gzip_response=not stream
                 )
             except urllib.error.HTTPError as error:
                 try:
@@ -575,7 +667,7 @@ class Handler(BaseHTTPRequestHandler):
                 if error.code in (400, 422):
                     snapped_body = snap_reasoning_effort(body, detail) if _snap_depth < 2 else None
                     if snapped_body:
-                        return self._proxy_body(snapped_body, stream, _snap_depth + 1)
+                        return self._proxy_body(snapped_body, stream, _snap_depth + 1, _search_round)
                     break
                 if error.code in COOLDOWNS:
                     POOL.mark_down(account, f"HTTP {error.code}", COOLDOWNS[error.code])
@@ -589,7 +681,7 @@ class Handler(BaseHTTPRequestHandler):
                 # Read the full payload first: headers stay unsent, so a mid-read
                 # upstream failure can still fall through to the next account.
                 try:
-                    payload = normalize_completion(upstream.read())
+                    payload = normalize_completion(read_upstream_bytes(upstream))
                 except (OSError, http.client.HTTPException) as error:
                     LOG.warning("key=%s died mid-read: %s", account.name, error)
                     last_error = (502, str(error).encode())
@@ -599,6 +691,13 @@ class Handler(BaseHTTPRequestHandler):
                 completion = parse_event(b"data: " + payload) or {}
                 record_usage(completion.get("model") or self._request_model, account.name,
                              completion.get("usage") or {})
+                # Server-side web_search: the gateway injected the tool, so it
+                # must also execute it - the client never saw this tool call.
+                if getattr(self, "_search_injected", False) and _search_round < 2:
+                    followup = self._search_followup(payload)
+                    if followup is not None:
+                        LOG.info("web_search round %d via key=%s", _search_round + 1, account.name)
+                        return self._proxy_body(followup, False, _snap_depth, _search_round + 1)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("X-Pool-Key", account.name)
@@ -665,6 +764,43 @@ class Handler(BaseHTTPRequestHandler):
         code, detail = last_error if last_error else (500, b"no keys available")
         self._reply(code, {"error": {"message": detail.decode(errors="replace")[:500], "type": "upstream_error", "code": code}})
 
+    def _search_followup(self, payload: bytes) -> bytes | None:
+        """If the reply calls our injected web_search, run it and build round 2."""
+        try:
+            parsed = json.loads(payload)
+            message = parsed["choices"][0]["message"]
+            tool_calls = message.get("tool_calls") or []
+        except (ValueError, KeyError, IndexError, TypeError):
+            return None
+        searches = []
+        for call in tool_calls:
+            fn = (call.get("function") or {}) if isinstance(call, dict) else {}
+            if fn.get("name") != "web_search":
+                return None  # a client-visible tool call: leave the reply alone
+            try:
+                query = (json.loads(fn.get("arguments") or "{}") or {}).get("query", "")
+            except ValueError:
+                query = ""
+            searches.append((call, str(query)))
+        if not searches:
+            return None
+        original = getattr(self, "_chat_request_orig", None)
+        if not isinstance(original, dict) or not isinstance(original.get("messages"), list):
+            return None
+        assistant = {k: v for k, v in message.items() if k not in ("reasoning_content", "index")}
+        followup_messages = list(original["messages"]) + [assistant]
+        for call, query in searches:
+            LOG.info("web_search query: %s", query[:200])
+            followup_messages.append({
+                "role": "tool",
+                "tool_call_id": call.get("id") or "web_search",
+                "name": "web_search",
+                "content": do_web_search(query) if query else "web_search called with an empty query.",
+            })
+        followup = dict(original)
+        followup["messages"] = followup_messages
+        return json.dumps(followup).encode()
+
     # --- routes --------------------------------------------------------
     def do_GET(self):
         if not self._host_allowed():
@@ -692,10 +828,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             return self._reply(401, {"error": {"message": "unauthorized"}})
         if route in ("/v1/models", "/models"):
+            if MODELS_CACHE["payload"] is not None and time.time() - MODELS_CACHE["at"] < MODELS_CACHE_TTL:
+                return self._reply(200, MODELS_CACHE["payload"])
             for account in POOL.accounts_for():
                 try:
                     upstream = upstream_request_with_retry(
-                        MISTRAL_MODELS_URL, account.key, account.name, None, method="GET"
+                        MISTRAL_MODELS_URL, account.key, account.name, None, method="GET", gzip_response=True
                     )
                 except urllib.error.HTTPError as error:
                     error.close()
@@ -707,12 +845,13 @@ class Handler(BaseHTTPRequestHandler):
                     LOG.info("models via key=%s failed: %s", account.name, error)
                     continue
                 try:
-                    models = json.loads(upstream.read())
+                    models = json.loads(read_upstream_bytes(upstream))
                 except (OSError, http.client.HTTPException, ValueError) as error:
                     LOG.info("models read via key=%s failed: %s", account.name, error)
                     continue
                 finally:
                     upstream.close()
+                MODELS_CACHE.update({"at": time.time(), "payload": models})
                 return self._reply(200, models)
             return self._reply(502, {"error": {"message": "all keys failed"}})
         if route == "/pool/status":
@@ -736,9 +875,21 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, OverflowError):
                 window_days = 30
             try:
-                return self._reply(200, collect_stats(window_days))
+                stats = collect_stats(window_days)
             except sqlite3.Error as error:
                 return self._reply(500, {"error": {"message": f"usage db: {error}"}})
+            stats["safety"] = {
+                "gateway_key_set": bool(os.environ.get("GATEWAY_KEY")),
+                "bind": os.environ.get("BIND", "127.0.0.1"),
+                "single_account": True,
+                "accounts": [a.name for a in POOL.accounts] if POOL else [],
+                "rate_limit_per_min": rate_limit_per_min(),
+                "max_concurrent": MAX_CONCURRENT,
+                "web_search": search_enabled(),
+                "search_provider": (os.environ.get("SEARCH_PROVIDER") or ("tavily" if os.environ.get("SEARCH_API_KEY") else "ddg")),
+                "models_cached_s": MODELS_CACHE_TTL,
+            }
+            return self._reply(200, stats)
         if route == "/usage":
             # Optional ?days=N limits the window; default is everything logged.
             params = urllib.parse.parse_qs(query)
@@ -767,6 +918,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(403, {"error": {"message": "forbidden host"}})
         if not self._authorized():
             return self._reply(401, {"error": {"message": "unauthorized"}})
+        if not _rate_ok():
+            return self._reply(429, {"error": {"message": "gateway rate limit (protects the subscription account)", "type": "rate_limit"}})
         route = self.path.partition("?")[0]
         if route not in ("/v1/chat/completions", "/v1/chat/completions/", "/chat/completions") + RESPONSES_ROUTES + CONVERSATIONS_ROUTES:
             return self._reply(404, {"error": {"message": f"unknown route {self.path}"}})
@@ -849,6 +1002,21 @@ class Handler(BaseHTTPRequestHandler):
             # premature stop: the model finishes deliberating and composes.
             chat_request["reasoning_effort"] = "high"
             changed = True
+        # Variant B web search: only for plain chat requests that bring no
+        # tools of their own (agent clients execute tool calls themselves)
+        # and only non-streaming, where the gateway can run the search and
+        # feed the results back in a second round.
+        self._search_injected = False
+        self._chat_request_orig = None
+        if search_enabled() and not stream and not chat_request.get("tools"):
+            import copy as _copy
+            injected = _copy.deepcopy(chat_request)
+            injected["tools"] = [WEB_SEARCH_TOOL]
+            self._chat_request_orig = injected
+            self._search_injected = True
+            body = json.dumps(injected).encode()
+            self._request_model = chat_request.get("model") or "unknown"
+            return self._proxy_body(body, stream)
         if changed:
             body = json.dumps(chat_request).encode()
         self._request_model = chat_request.get("model") or "unknown"
@@ -888,6 +1056,12 @@ def main() -> int:
             "set GATEWAY_KEY or keep BIND on loopback"
         )
     data_dir().mkdir(parents=True, exist_ok=True)
+    global _concurrency, MAX_CONCURRENT
+    try:
+        MAX_CONCURRENT = max(1, int(os.environ.get("MAX_CONCURRENT", "6")))
+    except ValueError:
+        MAX_CONCURRENT = 6
+    _concurrency = threading.BoundedSemaphore(MAX_CONCURRENT)
     server = ThreadingHTTPServer((bind_address, port), Handler)
     LOG.info("mistral gateway on %s:%d (keys: %s)", bind_address, port,
              ", ".join(account.name for account in POOL.accounts))

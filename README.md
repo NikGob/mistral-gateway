@@ -59,6 +59,16 @@ Fork of `Classic298/mistral-gateway` 1.0.4 with a security audit (see
   serves every model your key can use via `/v1/models`.
 - **`POST /v1/conversations` passthrough**, the only route where Mistral's
   built-in `web_search` / `web_search_premium` / `code_interpreter` tools work.
+- **Server-side web search (Variant B)** with `WEB_SEARCH=1`: for plain
+  non-streaming chat requests that bring no tools of their own, the gateway
+  injects a `web_search(query)` function, executes the model's call itself
+  (DuckDuckGo by default — no key; or Tavily/Serper with `SEARCH_API_KEY`)
+  and feeds the results back in a second round (max 2 rounds). Agent clients
+  that execute tool calls themselves are never intercepted.
+- **Anti-ban guards:** `RATE_LIMIT_PER_MIN` and `MAX_CONCURRENT` caps so a
+  runaway client cannot hammer the single subscription account, on top of
+  the upstream polite 429 wait-and-retry. The panel has a "subscription
+  protection" card showing these live.
 - **Hardening:** refuses to start on a non-loopback bind without
   `GATEWAY_KEY` (the old keyless `Host`-header check was spoofable),
   `MAX_REQUEST_BYTES` cap (default 10 MiB), POST routes tolerate query
