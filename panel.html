@@ -197,7 +197,10 @@ function page(){return (location.hash||'#overview').slice(1)}
 const titles={overview:'Обзор',chat:'Чат',keys:'Ключи',models:'Модели'};
 function show(){
   const name=['overview','chat','keys','models'].includes(page())?page():'overview';
-  document.querySelectorAll('.rail a').forEach(a=>a.setAttribute('aria-current',a.dataset.page===name?'page':'false'));
+  document.querySelectorAll('.rail a').forEach(a=>{
+    if(a.dataset.page===name) a.setAttribute('aria-current','page');
+    else a.removeAttribute('aria-current');
+  });
   ['overview','chat','keys','models'].forEach(id=>$('page-'+id).classList.toggle('on',id===name));
   $('title').textContent=titles[name];
   if(name==='overview') loadStats();
@@ -209,7 +212,8 @@ async function loadStatus(){
     const s=await (await fetch('/api/status')).json();
     const box=$('status');
     const on=(s.serving||[]).length;
-    box.innerHTML=`<i class="dot${on?'':' off'}"></i><b>${on?'Онлайн':'Пауза'}</b><span>${esc(s.plan_name||'')}</span>`;
+    const label=(on?'Онлайн':'Пауза')+(s.plan_name?' · '+s.plan_name:'');
+    box.innerHTML=`<i class="dot${on?'':' off'}"></i><b>${esc(label)}</b>`;
   }catch(e){$('status').innerHTML='<i class="dot off"></i><b>Нет связи</b>'}
 }
 async function loadStats(){
