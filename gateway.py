@@ -693,10 +693,20 @@ class Handler(BaseHTTPRequestHandler):
                              completion.get("usage") or {})
                 # Server-side web_search: the gateway injected the tool, so it
                 # must also execute it - the client never saw this tool call.
-                if getattr(self, "_search_injected", False) and _search_round < 2:
+                if getattr(self, "_search_injected", False) and _search_round < 3:
                     followup = self._search_followup(payload)
                     if followup is not None:
-                        LOG.info("web_search round %d via key=%s", _search_round + 1, account.name)
+                        if _search_round >= 2:
+                            # Model keeps searching: final round gets the last
+                            # results but no tools, so it must answer in text
+                            # instead of returning a bare tool_calls reply.
+                            forced = json.loads(followup)
+                            forced.pop("tools", None)
+                            forced.pop("tool_choice", None)
+                            followup = json.dumps(forced).encode()
+                            LOG.info("web_search final synthesis round via key=%s", account.name)
+                        else:
+                            LOG.info("web_search round %d via key=%s", _search_round + 1, account.name)
                         return self._proxy_body(followup, False, _snap_depth, _search_round + 1)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
