@@ -44,6 +44,35 @@ The chat models below were tested through the gateway on 2026-10-06 (GLM 5.3 Fla
 
 All of them handle tool calls. Clients can send any standard `reasoning_effort` level to any model. When a model does not offer the requested level, the gateway uses the closest one it does offer, and on a tie `minimal` and `low` go down while everything else goes up: on Mistral Large 4, Medium and Small, `minimal` and `low` become `none` and the rest become `high`. Models without reasoning get the request without it. DeepSeek V4.1 Flash only thinks when the client sends a reasoning level. Mistral's docs list it as `deepseek-v4-flash-1017`, but the API only accepts `deepseek-v4-1-flash-1017`. Labs models such as `labs-leanstral-1-5` only answer once an admin enables Labs models in the organization settings. Embedding, OCR and transcription models are listed too, but the gateway only serves chat.
 
+## This fork (NikGob)
+
+Fork of `Classic298/mistral-gateway` 1.0.4 with a security audit (see
+[`AUDIT.md`](AUDIT.md), including the Russia/RF-IP account-risk section) and:
+
+- **Web panel (Material Design 3)** at `/` or `/panel`: token totals, per-model
+  and per-day usage, key-pool status, and the equivalent pay-as-you-go value
+  for models with a published price (e.g. GLM 5.3 Flash at $0.15/$0.03/$0.50
+  per 1M input/cached/output). Vibe-plan traffic is covered by the flat
+  subscription — the dollar figure is "what this would cost on Studio",
+  not money charged. `GLM 5.3 Flash` (`zai-glm-5-3-flash`, released
+  2026-10-22) is highlighted in the model catalogue; the gateway itself
+  serves every model your key can use via `/v1/models`.
+- **`POST /v1/conversations` passthrough**, the only route where Mistral's
+  built-in `web_search` / `web_search_premium` / `code_interpreter` tools work.
+- **Hardening:** refuses to start on a non-loopback bind without
+  `GATEWAY_KEY` (the old keyless `Host`-header check was spoofable),
+  `MAX_REQUEST_BYTES` cap (default 10 MiB), POST routes tolerate query
+  strings, reasoning-effort retry capped, `DATA_DIR` for container state.
+- **Docker:** `Dockerfile` + `docker-compose.yml` (LAN-IP-only port publish,
+  non-root, read-only FS, state in `./data`). On the Pi:
+
+  ```sh
+  git clone https://github.com/NikGob/mistral-gateway.git ~/mistral-gateway
+  cd ~/mistral-gateway && cp .env.example .env  # fill VIBE_KEY + GATEWAY_KEY
+  docker compose up -d --build
+  # panel: http://192.168.0.157:18788/   API: http://192.168.0.157:18788/v1
+  ```
+
 ## Setup
 
 Requirements: Python 3.10+ and a Mistral Vibe plan with coding included (Pro, Team or Enterprise).

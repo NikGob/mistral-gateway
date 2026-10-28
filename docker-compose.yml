@@ -1,0 +1,23 @@
+services:
+  mistral-gateway:
+    build: .
+    container_name: mistral-gateway
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      BIND: "0.0.0.0"
+      PORT: "8788"
+      DATA_DIR: /data
+    # LAN only: never publish on 0.0.0.0 of the Pi, never forward this port
+    # on the router. Change the left port here if 18788 is taken.
+    ports:
+      - "192.168.0.157:18788:8788"
+    volumes:
+      - ./data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

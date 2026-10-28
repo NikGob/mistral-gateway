@@ -1,0 +1,7 @@
+.git
+.env
+gateway.env
+data
+__pycache__
+*.db
+pool_state.json
