@@ -1090,9 +1090,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(429, {"error": {"message": "gateway busy", "type": "rate_limit"}})
         try:
             if search:
-                instructions = "\n".join(
-                    str(item.get("content") or "") for item in messages
-                    if isinstance(item, dict) and item.get("role") == "system"
+                instructions = (
+                    "You have a web_search tool. For anything time-sensitive — versions, news, "
+                    "prices, dates, or the words latest/сегодня/сейчас — call web_search once "
+                    "before you answer. Answer in the user's language, in plain text, and name "
+                    "the source you actually used.\n"
+                    + "\n".join(
+                        str(item.get("content") or "") for item in messages
+                        if isinstance(item, dict) and item.get("role") == "system"
+                    )
                 )
                 inputs = [
                     {"role": item.get("role"), "content": str(item.get("content") or "")}
